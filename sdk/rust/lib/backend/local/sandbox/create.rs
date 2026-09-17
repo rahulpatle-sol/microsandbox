@@ -267,6 +267,15 @@ impl LocalBackend {
                 None
             };
 
+            // Reject incompatible snapshot + patch combinations before creating
+            // any on-disk state so a rejected run leaves no phantom directory that
+            // would block retries under the same sandbox name (see #1550).
+            if config.snapshot_upper_source.is_some() && upper_tree.is_some() {
+                return Err(crate::MicrosandboxError::InvalidConfig(
+                    "patches cannot be combined with from_snapshot".into(),
+                ));
+            }
+
             // Ensure sandbox storage exists before provisioning either a private flat rootfs or
             // the writable overlay upper image.
             tokio::fs::create_dir_all(&sandbox_dir).await?;
@@ -289,11 +298,10 @@ impl LocalBackend {
                 // place, preserving sparseness. Patches are not
                 // compatible with this path because they'd need to be
                 // re-baked into the snapshot's upper, which we don't do.
-                if upper_tree.is_some() {
-                    return Err(crate::MicrosandboxError::InvalidConfig(
-                        "patches cannot be combined with from_snapshot".into(),
-                    ));
-                }
+                //
+                // The incompatible-snapshot-plus-patches check is performed
+                // earlier (before directory creation) so a rejected run
+                // leaves no phantom sandbox name — see #1550.
                 let dst = upper_path.clone();
                 tokio::task::spawn_blocking(move || {
                     microsandbox_utils::copy::fast_copy(&snap_upper, &dst)
