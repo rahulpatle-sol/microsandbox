@@ -2923,7 +2923,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_local_rejects_snapshot_patches_before_creating_directory() {
-        let temp = tempdir().unwrap();
+        // Keep Unix socket paths short; Windows uses named pipes instead.
+        let temp_root = if cfg!(windows) {
+            std::env::temp_dir()
+        } else {
+            std::path::PathBuf::from("/tmp")
+        };
+        let temp = tempfile::Builder::new()
+            .prefix("msb")
+            .tempdir_in(temp_root)
+            .unwrap();
         let backend = Arc::new(
             crate::test_support::local_backend_builder(temp.path().join("home"))
                 .build()
